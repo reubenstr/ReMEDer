@@ -9,12 +9,13 @@
 //
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <RtcDS1307.h>
+#include <RtcDS1307.h> // RTC Library: https://github.com/Makuna/Rtc
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <EEPROM.h>
+#include <JC_Button.h> // https://github.com/JChristensen/JC_Button
 
 #define PIN_BUTTON_TIME 5
 #define PIN_BUTTON_ALARM 6
@@ -27,7 +28,6 @@
 #define DELAY_DEBOUNCE_MS 50
 #define DELAY_INDICATOR_MS 10 // Rise/Decay time for indicator (ms)
 
-// RTC Library: https://github.com/Makuna/Rtc
 RtcDS1307<TwoWire> Rtc(Wire);
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -35,8 +35,6 @@ RtcDS1307<TwoWire> Rtc(Wire);
 #define OLED_RESET 4     // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// https://github.com/JChristensen/JC_Button
-#include <JC_Button.h>
 Button buttonReset(PIN_BUTTON_RESET);
 Button buttonTime(PIN_BUTTON_TIME);
 Button buttonAlarm(PIN_BUTTON_ALARM);
@@ -56,10 +54,13 @@ bool indicatorOn = false;
 void Error(int x)
 {
   // Loop forever, indicates fatal error.
-  analogWrite(PIN_LED_INDICATOR, 0);
-  delay(1000);
-  analogWrite(PIN_LED_INDICATOR, 127);
-  delay(x);
+  while (1)
+  {
+    analogWrite(PIN_LED_INDICATOR, 0);
+    delay(1000);
+    analogWrite(PIN_LED_INDICATOR, 127);
+    delay(x);
+  }
 }
 
 void ProcessIndicator(bool isOn)
@@ -241,7 +242,7 @@ void SetupRTC()
       // what the number means
       Serial.print("RTC communications error = ");
       Serial.println(Rtc.LastError());
-      Error(100);
+      // Error(100);
     }
     else
     {
@@ -288,7 +289,7 @@ void SetupRTC()
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   Serial.println("ReMEDer starting up...");
 
@@ -320,15 +321,15 @@ void setup()
     alarmMinute = 0;
   }
 
-  //RtcDateTime dateTime = Rtc.GetDateTime();
-  //timeHour = dateTime.Hour();
-  //timeMinute = dateTime.Minute();
-  //UpdateDisplay(timeHour, timeMinute, alarmHour, alarmMinute);
+  // RtcDateTime dateTime = Rtc.GetDateTime();
+  // timeHour = dateTime.Hour();
+  // timeMinute = dateTime.Minute();
+  // UpdateDisplay(timeHour, timeMinute, alarmHour, alarmMinute);
 }
 
 void loop()
 {
-  
+  static unsigned long timeoutStartMillis = millis();
   bool updateDisplayFlag = false;
 
   static unsigned long builtinLedMillis;
@@ -341,7 +342,6 @@ void loop()
   if (ProcessControlButtons())
   {
     updateDisplayFlag = true;
-
     // Check if time was updated by the user.
     if (oldTimeHour != timeHour || oldTimeMinute != timeMinute)
     {
@@ -352,10 +352,14 @@ void loop()
     {
       oldAlarmHour = alarmHour;
       oldAlarmMinute = alarmMinute;
-      // TODO: add mechanism to avoid writing to many cycles to EEPROM.
       EEPROM.write(0, alarmHour);
       EEPROM.write(1, alarmMinute);
     }
+    Serial.print("Time -> ");
+    Serial.print(timeHour);
+    Serial.print(":");
+    Serial.print(timeMinute);
+    Serial.println("");
   }
 
   // Check if time has updated.
@@ -384,16 +388,29 @@ void loop()
     Error(100);
   }
 
-  if (updateDisplayFlag)
-  {
-    updateDisplayFlag = false;
-    UpdateDisplay(timeHour, timeMinute, alarmHour, alarmMinute);
-  }
-
   if (ProcessResetButton())
   {
+    if (!indicatorOn)
+    {
+      updateDisplayFlag = true;
+    }
+
     indicatorOn = false;
   }
 
+  if (updateDisplayFlag)
+  {
+    updateDisplayFlag = false;
+    timeoutStartMillis = millis();
+    display.ssd1306_command(SSD1306_DISPLAYON);
+    UpdateDisplay(timeHour, timeMinute, alarmHour, alarmMinute);
+  }
+
   ProcessIndicator(indicatorOn);
+
+  // Turn off display after timeout.
+  if (millis() - timeoutStartMillis > 15000)
+  {
+    display.ssd1306_command(SSD1306_DISPLAYOFF);
+  }
 }

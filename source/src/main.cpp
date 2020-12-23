@@ -342,6 +342,7 @@ void loop()
   if (ProcessControlButtons())
   {
     updateDisplayFlag = true;
+    
     // Check if time was updated by the user.
     if (oldTimeHour != timeHour || oldTimeMinute != timeMinute)
     {
@@ -372,8 +373,7 @@ void loop()
     if (oldTimeHour != timeHour || oldTimeMinute != timeMinute)
     {
       oldTimeHour = timeHour;
-      oldTimeMinute = timeMinute;
-      updateDisplayFlag = true;
+      oldTimeMinute = timeMinute;      
 
       // Check for alarm trigger
       if (timeHour == alarmHour && timeMinute == alarmMinute)
